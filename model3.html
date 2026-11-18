@@ -3,90 +3,83 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>piperack industrie — AR viewer</title>
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
   <style>
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: #0e1116; color: #e8edf4; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
-header {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 2;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
-  background: linear-gradient(to bottom, rgba(14,17,22,.92), rgba(14,17,22,0));
-  pointer-events: none;
-}
+header { position: fixed; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); background: linear-gradient(to bottom, rgba(14,17,22,.92), rgba(14,17,22,0)); pointer-events: none; }
 header a, header .title { pointer-events: auto; }
 header a { color: #9db0c8; text-decoration: none; font-size: 14px; }
-header .title { font-weight: 650; font-size: 16px; letter-spacing: .01em; }
+header .title { font-weight: 650; font-size: 16px; }
 model-viewer { width: 100%; height: 100%; --poster-color: #0e1116; }
-.hint {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 2;
-  margin: 0; padding: 16px 16px calc(44px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, rgba(14,17,22,.92), rgba(14,17,22,0));
-  font-size: 13px; color: #b7c4d4; text-align: center;
-}
-.progress {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: min(240px, 70vw); height: 4px; border-radius: 4px; background: #243044; overflow: hidden;
-}
+.progress { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(240px, 70vw); height: 4px; border-radius: 4px; background: #243044; overflow: hidden; }
 .progress .bar { height: 100%; width: 0%; background: #7eb6ff; transition: width .15s linear; }
-.arbtn { position:absolute; left:50%; bottom:120px; white-space:nowrap; transform:translateX(-50%); z-index:3; padding:14px 22px; border:0; border-radius:28px; background:#7eb6ff; color:#0e1116; font-weight:700; font-size:16px; }
-.fallback { position:fixed; left:50%; bottom:184px; transform:translateX(-50%); z-index:3; display:none; padding:12px 18px; border-radius:24px; background:#2b6cb0; color:#fff; font-weight:600; text-decoration:none; font-size:15px; white-space:nowrap; }
-</style>
+.arbtn { position: absolute; left: 50%; bottom: 150px; white-space: nowrap; transform: translateX(-50%); z-index: 3; padding: 14px 22px; border: 0; border-radius: 28px; background: #7eb6ff; color: #0e1116; font-weight: 700; font-size: 16px; }
+#diag { position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 4; max-height: 120px; overflow: auto; margin: 0; padding: 8px 10px;
+  background: rgba(10,13,18,.88); border: 1px solid #2a3342; border-radius: 10px; font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #b7c4d4; white-space: pre-wrap; word-break: break-word; }
+#diag .bad { color: #ff8a80; } #diag .ok { color: #9be39b; }
+  </style>
 </head>
 <body>
   <header>
     <a href="./">All models</a>
     <div class="title">piperack industrie</div>
   </header>
-  <model-viewer
-    id="mv"
-    src="model3.glb"
-    alt="piperack industrie"
-    ar
-    ar-modes="scene-viewer webxr quick-look"
-    ar-scale="auto"
-    camera-controls
-    touch-action="pan-y"
-    shadow-intensity="1"
-    environment-image="neutral"
-    exposure="0.9"
-    auto-rotate
-    auto-rotate-delay="3000"
-    loading="eager"
-    reveal="auto"
-  >
+  <model-viewer id="mv" src="model3.glb" alt="piperack industrie"
+    ar ar-modes="webxr quick-look" ar-scale="auto" ar-placement="floor"
+    camera-controls touch-action="pan-y" shadow-intensity="1" environment-image="neutral" exposure="0.9"
+    loading="eager" reveal="auto">
     <button slot="ar-button" class="arbtn">View in your space (AR)</button>
     <div class="progress" slot="progress-bar"><div class="bar" id="bar"></div></div>
   </model-viewer>
-  <p class="hint">Tap “View in your space” to place the model (real size, pinch to scale). No AR button? Open this link in Chrome (Android) or Safari (iPhone), not inside the QR scanner app.</p>
+  <pre id="diag">AR diagnostics: starting…</pre>
   <script>
-    const mv = document.getElementById('mv');
-    const bar = document.getElementById('bar');
-    mv.addEventListener('progress', (e) => {
-      const p = e.detail && e.detail.totalProgress != null ? e.detail.totalProgress : 0;
-      bar.style.width = Math.round(p * 100) + '%';
+  (function () {
+    var mv = document.getElementById('mv'), out = document.getElementById('diag'), t0 = Date.now();
+    function line(msg, cls) {
+      var s = document.createElement('div'); if (cls) s.className = cls;
+      s.textContent = '[' + ((Date.now() - t0) / 1000).toFixed(1) + 's] ' + msg; out.appendChild(s); out.scrollTop = out.scrollHeight;
+    }
+    out.textContent = '';
+    // Surface model-viewer's own AR warnings/errors (it reports WebXR failures via console.warn/console.error).
+    ['warn', 'error'].forEach(function (k) {
+      var orig = console[k];
+      console[k] = function () {
+        try { line('console.' + k + ': ' + Array.prototype.map.call(arguments, function (a) { return a && a.message ? (a.name + ': ' + a.message) : String(a); }).join(' '), 'bad'); } catch (e) {}
+        return orig.apply(console, arguments);
+      };
     });
-    mv.addEventListener('load', () => {
-      const el = document.querySelector('.progress');
-      if (el) el.style.display = 'none';
+    window.addEventListener('error', function (e) { line('page error: ' + e.message, 'bad'); });
+    window.addEventListener('unhandledrejection', function (e) { var r = e.reason; line('unhandled: ' + (r && r.message ? r.name + ': ' + r.message : r), 'bad'); });
+    var inIframe = false; try { inIframe = window.self !== window.top; } catch (e) { inIframe = true; }
+    var xr = 'xr' in navigator, hit = !!(window.XRSession && XRSession.prototype.requestHitTestSource);
+    line('secure context: ' + window.isSecureContext + ', top-level: ' + !inIframe + ', navigator.xr: ' + xr + ', hit-test API: ' + hit, (window.isSecureContext && !inIframe && xr && hit) ? 'ok' : 'bad');
+    if (!xr) line('No WebXR in this browser. If you opened this from a QR scanner or chat app, use the menu "Open in Chrome".', 'bad');
+    if (xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
+      line('immersive-ar supported: ' + ok, ok ? 'ok' : 'bad');
+    }, function (e) { line('immersive-ar check failed: ' + e.name + ': ' + e.message, 'bad'); });
+    var bar = document.getElementById('bar');
+    mv.addEventListener('progress', function (e) { var p = e.detail && e.detail.totalProgress != null ? e.detail.totalProgress : 0; bar.style.width = Math.round(p * 100) + '%'; });
+    mv.addEventListener('load', function () {
+      var el = document.querySelector('.progress'); if (el) el.style.display = 'none';
+      var d = mv.getDimensions ? mv.getDimensions() : null;
+      line('model loaded' + (d ? ' (' + d.x.toFixed(1) + ' x ' + d.y.toFixed(1) + ' x ' + d.z.toFixed(1) + ' m)' : '') + '; AR available: ' + mv.canActivateAR, mv.canActivateAR ? 'ok' : 'bad');
+      if (!mv.canActivateAR) line('AR button hidden: this browser offers no WebXR AR (needs Android Chrome with Google Play Services for AR) or Quick Look (iPhone Safari).', 'bad');
     });
-    mv.addEventListener('error', (e) => {
-      document.querySelector('.hint').textContent = 'The model failed to load. Check the GLB URL and try again.';
+    mv.addEventListener('error', function (e) { line('model error: ' + JSON.stringify(e.detail || {}), 'bad'); });
+    var started = 0;
+    mv.addEventListener('ar-status', function (e) {
+      var s = e.detail.status;
+      if (s === 'session-started') started = Date.now();
+      if (s === 'not-presenting' && started && Date.now() - started < 3000) line('AR session ended ' + (Date.now() - started) + ' ms after it started', 'bad');
+      line('ar-status: ' + s, s === 'failed' ? 'bad' : null);
     });
-  </script>
-  <a id="sv" class="fallback" href="#">Open in Android AR (Scene Viewer)</a>
-  <script>
-    (function(){
-      var glb = new URL(document.getElementById('mv').getAttribute('src'), location.href).href;
-      var title = document.title.split(' — ')[0];
-      var q = 'file=' + encodeURIComponent(glb) + '&mode=ar_preferred&title=' + encodeURIComponent(title);
-      var a = document.getElementById('sv');
-      a.href = 'intent://arvr.google.com/scene-viewer/1.0?' + q + '#Intent;scheme=https;package=com.google.android.googlequicksearchbox;action=android.intent.action.VIEW;S.browser_fallback_url=' + encodeURIComponent('https://developers.google.com/ar') + ';end;';
-      if (/Android/i.test(navigator.userAgent)) a.style.display = 'block';
-    })();
+    mv.addEventListener('ar-tracking', function (e) { line('ar-tracking: ' + e.detail.status, e.detail.status === 'not-tracking' ? 'bad' : null); });
+    mv.querySelector('[slot=ar-button]').addEventListener('click', function () { line('AR button tapped, starting ' + (mv.canActivateAR ? 'AR' : '(AR unavailable)') + '…'); });
+  })();
   </script>
 </body>
 </html>
